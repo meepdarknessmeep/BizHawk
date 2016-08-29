@@ -22,6 +22,8 @@ namespace BizHawk.Client.EmuHawk
 
 		public bool UpdateBefore { get { return false; } }
 
+		public void NewUpdate(ToolFormUpdateType type) { }
+
 		private int lastRefresh = 0;
 		public void UpdateValues()
 		{
@@ -78,7 +80,7 @@ namespace BizHawk.Client.EmuHawk
 			{
 				if (Global.Game.Hash != CurrentTasMovie.Hash)
 				{
-					TastudioToStopMovie();
+					TastudioStopMovie();
 					TasView.AllColumns.Clear();
 					StartNewTasMovie();
 					SetUpColumns();
@@ -98,6 +100,9 @@ namespace BizHawk.Client.EmuHawk
 				return true;
 			}
 
+			IgnoreSeekFrame = false; // don't unpause
+			StopSeeking();
+
 			if (CurrentTasMovie != null && CurrentTasMovie.Changes)
 			{
 				GlobalWin.Sound.StopSound();
@@ -112,7 +117,7 @@ namespace BizHawk.Client.EmuHawk
 				if (result == DialogResult.Yes)
 				{
 					_exiting = true; // Asking to save changes should only ever be called when closing something
-					SaveTasMenuItem_Click(null, null);
+					SaveTas(null, null);
 				}
 				else if (result == DialogResult.No)
 				{

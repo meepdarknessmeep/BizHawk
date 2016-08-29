@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 using BizHawk.Common;
 using BizHawk.Common.BufferExtensions;
@@ -338,7 +339,7 @@ namespace BizHawk.Emulation.Cores.PCEngine
 
 		void ICodeDataLogger.DisassembleCDL(Stream s, CodeDataLog cdl)
 		{
-			Cpu.DisassembleCDL(s, cdl, memoryDomains);
+			Cpu.DisassembleCDL(s, cdl, _memoryDomains);
 		}
 
 		private static Dictionary<string, int> SizesFromHuMap(IEnumerable<HuC6280.MemMapping> mm)
@@ -483,6 +484,9 @@ namespace BizHawk.Emulation.Cores.PCEngine
 				ser.Sync("BRAM", ref BRAM, false);
 
 			ser.EndSection();
+
+			if (ser.IsReader)
+				SyncAllByteArrayDomains();
 		}
 
 		byte[] stateBuffer;
@@ -511,15 +515,9 @@ namespace BizHawk.Emulation.Cores.PCEngine
 
 		void SetupMemoryDomains()
 		{
-			var domains = new List<MemoryDomain>(10);
-			int mainmemorymask = Ram.Length - 1;
-			var MainMemoryDomain = new MemoryDomain("Main Memory", Ram.Length, MemoryDomain.Endian.Little,
-				addr => Ram[addr],
-				(addr, value) => Ram[addr] = value,
-				byteSize: 2);
-			domains.Add(MainMemoryDomain);
+			var domains = new List<MemoryDomain>(2);
 
-			var SystemBusDomain = new MemoryDomain("System Bus (21 bit)", 0x200000, MemoryDomain.Endian.Little,
+			var SystemBusDomain = new MemoryDomainDelegate("System Bus (21 bit)", 0x200000, MemoryDomain.Endian.Little,
 				(addr) =>
 				{
 					if (addr < 0 || addr >= 0x200000)
@@ -532,10 +530,10 @@ namespace BizHawk.Emulation.Cores.PCEngine
 						throw new ArgumentOutOfRangeException();
 					Cpu.WriteMemory21((int)addr, value);
 				},
-				byteSize: 2);
+				wordSize: 2);
 			domains.Add(SystemBusDomain);
 
-			var CpuBusDomain = new MemoryDomain("System Bus", 0x10000, MemoryDomain.Endian.Little,
+			var CpuBusDomain = new MemoryDomainDelegate("System Bus", 0x10000, MemoryDomain.Endian.Little,
 				(addr) =>
 				{
 					if (addr < 0 || addr >= 0x10000)
@@ -548,71 +546,58 @@ namespace BizHawk.Emulation.Cores.PCEngine
 						throw new ArgumentOutOfRangeException();
 					Cpu.WriteMemory((ushort)addr, value);
 				},
-				byteSize: 2);
+				wordSize: 2);
 			domains.Add(CpuBusDomain);
 
-			var RomDomain = new MemoryDomain("ROM", RomLength, MemoryDomain.Endian.Little,
-				addr => RomData[addr],
-				(addr, value) => RomData[addr] = value,
-				byteSize: 2);
-			domains.Add(RomDomain);
+			SyncAllByteArrayDomains();
+
+			_memoryDomains = new MemoryDomainList(domains.Concat(_byteArrayDomains.Values).ToList());
+			_memoryDomains.SystemBus = CpuBusDomain;
+			_memoryDomains.MainMemory = _byteArrayDomains["Main Memory"];
+			(ServiceProvider as BasicServiceProvider).Register<IMemoryDomains>(_memoryDomains);
+			_memoryDomainsInit = true;
+		}
+
+		private void SyncAllByteArrayDomains()
+		{
+			SyncByteArrayDomain("Main Memory", Ram);
+			SyncByteArrayDomain("ROM", RomData);
 
 			if (BRAM != null)
-			{
-				var BRAMMemoryDomain = new MemoryDomain("Battery RAM", Ram.Length, MemoryDomain.Endian.Little,
-					addr => BRAM[addr],
-					(addr, value) => BRAM[addr] = value,
-					byteSize: 2);
-				domains.Add(BRAMMemoryDomain);
-			}
+				SyncByteArrayDomain("Battery RAM", BRAM);
 
 			if (TurboCD)
 			{
-				var CDRamMemoryDomain = new MemoryDomain("TurboCD RAM", CDRam.Length, MemoryDomain.Endian.Little,
-					addr => CDRam[addr],
-					(addr, value) => CDRam[addr] = value,
-					byteSize: 2);
-				domains.Add(CDRamMemoryDomain);
-
-				var AdpcmMemoryDomain = new MemoryDomain("ADPCM RAM", ADPCM.RAM.Length, MemoryDomain.Endian.Little,
-					addr => ADPCM.RAM[addr],
-					(addr, value) => ADPCM.RAM[addr] = value,
-					byteSize: 2);
-				domains.Add(AdpcmMemoryDomain);
-
+				SyncByteArrayDomain("TurboCD RAM", CDRam);
+				SyncByteArrayDomain("ADPCM RAM", ADPCM.RAM);
 				if (SuperRam != null)
-				{
-					var SuperRamMemoryDomain = new MemoryDomain("Super System Card RAM", SuperRam.Length, MemoryDomain.Endian.Little,
-						addr => SuperRam[addr],
-						(addr, value) => SuperRam[addr] = value,
-						byteSize: 2);
-					domains.Add(SuperRamMemoryDomain);
-				}
+					SyncByteArrayDomain("Super System Card RAM", SuperRam);
 			}
 
 			if (ArcadeCard)
-			{
-				var ArcadeRamMemoryDomain = new MemoryDomain("Arcade Card RAM", ArcadeRam.Length, MemoryDomain.Endian.Little,
-						addr => ArcadeRam[addr],
-						(addr, value) => ArcadeRam[addr] = value,
-						byteSize: 2);
-				domains.Add(ArcadeRamMemoryDomain);
-			}
+				SyncByteArrayDomain("Arcade Card RAM", ArcadeRam);
 
 			if (PopulousRAM != null)
-			{
-				var PopulusRAMDomain = new MemoryDomain("Cart Battery RAM", PopulousRAM.Length, MemoryDomain.Endian.Little,
-					addr => PopulousRAM[addr],
-					(addr, value) => PopulousRAM[addr] = value,
-					byteSize: 2);
-				domains.Add(PopulusRAMDomain);
-			}
-
-			memoryDomains = new MemoryDomainList(domains);
-			(ServiceProvider as BasicServiceProvider).Register<IMemoryDomains>(memoryDomains);
+				SyncByteArrayDomain("Cart Battery RAM", PopulousRAM);
 		}
 
-		MemoryDomainList memoryDomains;
+		private void SyncByteArrayDomain(string name, byte[] data)
+		{
+			if (_memoryDomainsInit)
+			{
+				var m = _byteArrayDomains[name];
+				m.Data = data;
+			}
+			else
+			{
+				var m = new MemoryDomainByteArray(name, MemoryDomain.Endian.Little, data, true, 1);
+				_byteArrayDomains.Add(name, m);
+			}
+		}
+
+		private Dictionary<string, MemoryDomainByteArray> _byteArrayDomains = new Dictionary<string,MemoryDomainByteArray>();
+		private bool _memoryDomainsInit = false;
+		private MemoryDomainList _memoryDomains;
 
 		public IDictionary<string, RegisterValue> GetCpuFlagsAndRegisters()
 		{

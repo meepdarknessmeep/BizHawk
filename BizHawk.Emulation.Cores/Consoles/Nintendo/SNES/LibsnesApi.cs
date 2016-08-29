@@ -86,11 +86,16 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 			InitBrkFunctions();
 			InitQueryFunctions();
 		}
+		~LibsnesApi()
+		{
+			// This is now needed because of Dispose being called after all the objects 
+			// That we pass to the unmanaged code are garbage collected.
+			// It will crash if we do this in Dispose()
+			instanceDll.Dispose();
+		}
 
 		public void Dispose()
-		{
-			instanceDll.Dispose();
-            
+		{   
 			mmva.Dispose();
 			mmf.Dispose();
 			foreach (var smb in DeallocatedMemoryBlocks.Values)

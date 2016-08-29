@@ -174,7 +174,7 @@ namespace BizHawk.Client.Common
 		{
 			get
 			{
-				if (Names.Count == 0)
+				if (Names.Count == 0 || UndoIndex < 0)
 					return null;
 				else
 					return Names[UndoIndex];
@@ -332,7 +332,15 @@ namespace BizHawk.Client.Common
 			LastFrame = lastFrame;
 			oldLog = new List<string>(length);
 
-			undoLength = Math.Min(lastFrame + 1, movie.InputLogLength) - firstFrame;
+			var minuend = Math.Min(lastFrame + 1, movie.InputLogLength);
+			if (firstFrame > minuend)
+				undoLength = minuend;
+			else
+				undoLength = minuend - firstFrame;
+
+			if (FirstFrame > oldLog.Count())
+				FirstFrame = oldLog.Count();
+
 			for (int i = 0; i < undoLength; i++)
 				oldLog.Add(movie.GetLogEntries()[FirstFrame + i]);
 
@@ -354,13 +362,12 @@ namespace BizHawk.Client.Common
 			movie.BindMarkersToInput = bindMarkers;
 
 			if (redoLength != length)
-				movie.InsertEmptyFrame(movie.InputLogLength, length - redoLength);
+				movie.InsertEmptyFrame(FirstFrame, length - redoLength, true);
+			if (undoLength != length)
+				movie.RemoveFrames(FirstFrame, movie.InputLogLength - undoLength, true);
 
 			for (int i = 0; i < undoLength; i++)
 				movie.SetFrame(FirstFrame + i, oldLog[i]);
-
-			if (undoLength != length)
-				movie.RemoveFrames(FirstFrame + undoLength, movie.InputLogLength);
 
 			movie.ChangeLog.IsRecording = wasRecording;
 			movie.BindMarkersToInput = bindMarkers;
@@ -373,13 +380,12 @@ namespace BizHawk.Client.Common
 			movie.BindMarkersToInput = bindMarkers;
 
 			if (undoLength != length)
-				movie.InsertEmptyFrame(movie.InputLogLength, length - undoLength);
+				movie.InsertEmptyFrame(FirstFrame, length - undoLength);
+			if (redoLength != length)
+				movie.RemoveFrames(FirstFrame, movie.InputLogLength - redoLength);
 
 			for (int i = 0; i < redoLength; i++)
 				movie.SetFrame(FirstFrame + i, newLog[i]);
-
-			if (redoLength != length)
-				movie.RemoveFrames(FirstFrame + redoLength, movie.InputLogLength);
 
 			movie.ChangeLog.IsRecording = wasRecording;
 			movie.BindMarkersToInput = bindMarkers;
@@ -416,24 +422,24 @@ namespace BizHawk.Client.Common
 		public void Undo(TasMovie movie)
 		{
 			if (FirstFrame == -1) // Action: Place marker
-				movie.Markers.Remove(movie.Markers.Get(LastFrame));
+				movie.Markers.Remove(movie.Markers.Get(LastFrame), true);
 			else if (LastFrame == -1) // Action: Remove marker
-				movie.Markers.Add(FirstFrame, oldMessage);
+				movie.Markers.Add(FirstFrame, oldMessage, true);
 			else // Action: Move/rename marker
 			{
-				movie.Markers.Move(LastFrame, FirstFrame);
+				movie.Markers.Move(LastFrame, FirstFrame, true);
 				movie.Markers.Get(LastFrame).Message = oldMessage;
 			}
 		}
 		public void Redo(TasMovie movie)
 		{
 			if (FirstFrame == -1) // Action: Place marker
-				movie.Markers.Add(LastFrame, oldMessage);
+				movie.Markers.Add(LastFrame, oldMessage, true);
 			else if (LastFrame == -1) // Action: Remove marker
-				movie.Markers.Remove(movie.Markers.Get(FirstFrame));
+				movie.Markers.Remove(movie.Markers.Get(FirstFrame), true);
 			else // Action: Move/rename marker
 			{
-				movie.Markers.Move(FirstFrame, LastFrame);
+				movie.Markers.Move(FirstFrame, LastFrame, true);
 				movie.Markers.Get(LastFrame).Message = newMessage;
 			}
 		}

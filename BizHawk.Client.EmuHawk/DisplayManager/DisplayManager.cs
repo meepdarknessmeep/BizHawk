@@ -109,9 +109,6 @@ namespace BizHawk.Client.EmuHawk
 					f.Dispose();
 		}
 
-		//dont know what to do about this yet
-		public bool NeedsToPaint { get; set; }
-
 		//rendering resources:
 		public IGL GL;
 		StringRenderer TheOneFont;
@@ -596,6 +593,12 @@ namespace BizHawk.Client.EmuHawk
 
 		FilterProgram UpdateSourceInternal(JobInfo job)
 		{
+			if (job.chain_outsize.Width == 0 || job.chain_outsize.Height == 0)
+			{
+				//this has to be a NOP, because lots of stuff will malfunction on a 0-sized viewport
+				return null;
+			}
+
 			//no drawing actually happens. it's important not to begin drawing on a control
 			if (!job.simulate && !job.offscreen)
 			{
@@ -784,6 +787,14 @@ namespace BizHawk.Client.EmuHawk
 				//only used by alternate vsync
 				var dx9 = GlobalWin.GL as BizHawk.Bizware.BizwareGL.Drivers.SlimDX.IGL_SlimDX9;
 
+				//ok, now this is a bit undesireable.
+				//maybe the user wants vsync, but not vsync throttle.
+				//this makes sense... but we dont have the infrastructure to support it now (we'd have to enable triple buffering or something like that)
+				//so what we're gonna do is disable vsync no matter what if throttling is off, and maybe nobody will notice.
+				//update 26-mar-2016: this upsets me. When fastforwarding and skipping frames, vsync should still work. But I'm not changing it yet
+				if (Global.DisableSecondaryThrottling)
+					vsync = false;
+
 				//for now, it's assumed that the presentation panel is the main window, but that may not always be true
 				bool alternateVsync = false;
 				if (dx9 != null)
@@ -796,14 +807,6 @@ namespace BizHawk.Client.EmuHawk
 
 				//TODO - whats so hard about triple buffering anyway? just enable it always, and change api to SetVsync(enable,throttle)
 				//maybe even SetVsync(enable,throttlemethod) or just SetVsync(enable,throttle,advanced)
-
-				//ok, now this is a bit undesireable.
-				//maybe the user wants vsync, but not vsync throttle.
-				//this makes sense... but we dont have the infrastructure to support it now (we'd have to enable triple buffering or something like that)
-				//so what we're gonna do is disable vsync no matter what if throttling is off, and maybe nobody will notice.
-				//update 26-mar-2016: this upsets me. When fastforwarding and skipping frames, vsync should still work. But I'm not changing it yet
-				if (Global.DisableSecondaryThrottling)
-					vsync = false;
 
 				if (LastVsyncSetting != vsync || LastVsyncSettingGraphicsControl != presentationPanel.GraphicsControl)
 				{
@@ -830,8 +833,6 @@ namespace BizHawk.Client.EmuHawk
 
 				//nope. dont do this. workaround for slow context switching on intel GPUs. just switch to another context when necessary before doing anything
 				//presentationPanel.GraphicsControl.End();
-
-				NeedsToPaint = false; //??
 			}
 		}
 
@@ -868,7 +869,7 @@ namespace BizHawk.Client.EmuHawk
 		/// <summary>
 		/// Locks the requested lua surface name
 		/// </summary>
-		public DisplaySurface LockLuaSurface(string name)
+		public DisplaySurface LockLuaSurface(string name, bool clear=true)
 		{
 			if (MapNameToLuaSurface.ContainsKey(name))
 				throw new InvalidOperationException("Lua surface is already locked: " + name);
@@ -897,7 +898,7 @@ namespace BizHawk.Client.EmuHawk
 			else if(name == "native") { width = currNativeWidth; height = currNativeHeight; }
 			else throw new InvalidOperationException("Unknown lua surface name: " +name);
 
-			DisplaySurface ret = sdss.AllocateSurface(width, height);
+			DisplaySurface ret = sdss.AllocateSurface(width, height, clear);
 			MapNameToLuaSurface[name] = ret;
 			MapLuaSurfaceToName[ret] = name;
 			return ret;
@@ -912,8 +913,9 @@ namespace BizHawk.Client.EmuHawk
 					var surf = PeekLockedLuaSurface(kvp.Key);
 					DisplaySurface surfLocked = null;
 					if (surf == null)
-						surf = surfLocked = LockLuaSurface(kvp.Key);
-					surf.Clear();
+						surf = surfLocked = LockLuaSurface(kvp.Key,true);
+					//zero 21-apr-2016 - we shouldnt need this
+					//surf.Clear();
 					if (surfLocked != null)
 						UnlockLuaSurface(surfLocked);
 					LuaSurfaceSets[kvp.Key].SetPending(null);

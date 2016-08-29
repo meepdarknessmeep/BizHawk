@@ -325,7 +325,6 @@ void HandleMessage_QUERY(eMessage msg)
 {
 }
 
-
 SNES_EXPORT void QUERY_enable_trace(bool state)
 {
 	if (!!state)
@@ -393,6 +392,10 @@ SNES_EXPORT void QUERY_enable_audio(bool enable)
 SNES_EXPORT void QUERY_set_color_lut(uint32_t blob[])
 {
 	snes_set_color_lut(blob);
+}
+SNES_EXPORT char QUERY_get_mapper()
+{
+	return snes_get_mapper();
 }
 SNES_EXPORT void CMD_run()
 {

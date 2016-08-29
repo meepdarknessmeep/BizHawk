@@ -17,7 +17,7 @@ namespace BizHawk.Client.Common
 		public Func<string> ClientSettingsForSave { get; set; }
 		public Action<string> GetClientSettingsOnLoad { get; set; }
 
-		protected override void Write(string fn)
+		protected override void Write(string fn, bool backup = false)
 		{
 			var file = new FileInfo(fn);
 			if (!file.Directory.Exists)
@@ -83,7 +83,8 @@ namespace BizHawk.Client.Common
 				bs.PutLump(BinaryStateLump.Session, tw => tw.WriteLine(Session.ToString()));
 			}
 
-			Changes = false;
+			if (!backup)
+				Changes = false;
 		}
 
 		public override bool Load(bool preload)
@@ -211,7 +212,7 @@ namespace BizHawk.Client.Common
 					}
 
 					// Movie should always have a state at frame 0.
-					if (!this.StartsFromSavestate)
+					if (!this.StartsFromSavestate && Global.Emulator.Frame == 0)
 						StateManager.Capture();
 				}
 

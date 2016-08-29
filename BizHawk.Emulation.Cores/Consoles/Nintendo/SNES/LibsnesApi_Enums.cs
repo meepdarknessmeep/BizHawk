@@ -6,7 +6,6 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 {
 	unsafe partial class LibsnesApi
 	{
-
 		public enum SNES_REG : int
 		{
 			//$2105
@@ -116,6 +115,21 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 
 			SYSBUS = 200,
 			LOGICAL_REGS = 201
+		}
+
+		public enum SNES_MAPPER : byte
+		{
+			LOROM = 0,
+			HIROM = 1,
+			EXLOROM = 2,
+			EXHIROM = 3,
+			SUPERFXROM = 4,
+			SA1ROM = 5,
+			SPC7110ROM = 6,
+			BSCLOROM = 7,
+			BSCHIROM = 8,
+			BSXROM = 9,
+			STROM = 10
 		}
 
 		public enum SNES_REGION : byte

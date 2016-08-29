@@ -177,7 +177,7 @@ namespace BizHawk.Client.Common
 			}
 		}
 
-		// This event is Raised ony when Changes is TOGGLED.
+		// This event is Raised only when Changes is TOGGLED.
 		private void OnPropertyChanged(string propertyName)
 		{
 			if (PropertyChanged != null)
@@ -218,14 +218,19 @@ namespace BizHawk.Client.Common
 			_mode = Moviemode.Play;
 		}
 
+		public override void SwitchToRecord()
+		{
+			_mode = Moviemode.Record;
+		}
+
 		/// <summary>
 		/// Removes lag log and greenzone after this frame
 		/// </summary>
 		/// <param name="frame">The last frame that can be valid.</param>
 		private void InvalidateAfter(int frame)
 		{
-			LagLog.RemoveFrom(frame);
-			var anyInvalidated = StateManager.Invalidate(frame + 1);
+			var anyInvalidated = LagLog.RemoveFrom(frame);
+			StateManager.Invalidate(frame + 1);
 			Changes = true; // TODO check if this actually removed anything before flagging changes
 
             if (anyInvalidated && Global.MovieSession.Movie.IsCountingRerecords)

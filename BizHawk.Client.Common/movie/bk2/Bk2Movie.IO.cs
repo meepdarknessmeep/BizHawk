@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 
 using BizHawk.Common;
 
@@ -29,7 +30,7 @@ namespace BizHawk.Client.Common
 				Directory.CreateDirectory(directory_info.FullName);
 			}
 
-			Write(backupName);
+			Write(backupName, backup: true);
 		}
 
 		public virtual bool Load(bool preload)
@@ -96,6 +97,7 @@ namespace BizHawk.Client.Common
 								Subtitles.AddFromString(line);
 							}
 						}
+						Subtitles.Sort();
 					});
 				}
 
@@ -168,7 +170,7 @@ namespace BizHawk.Client.Common
 			return Load(true);
 		}
 
-		protected virtual void Write(string fn)
+		protected virtual void Write(string fn, bool backup = false)
 		{
 			var file = new FileInfo(fn);
 			if (!file.Directory.Exists)
@@ -207,7 +209,8 @@ namespace BizHawk.Client.Common
 				}
 			}
 
-			Changes = false;
+			if (!backup)
+				Changes = false;
 		}
 
 		protected void ClearBeforeLoad()

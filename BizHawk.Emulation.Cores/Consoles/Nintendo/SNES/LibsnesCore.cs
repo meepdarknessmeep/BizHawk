@@ -1,4 +1,4 @@
-﻿//TODO - add serializer (?)
+//TODO - add serializer (?)
 
 //http://wiki.superfamicom.org/snes/show/Backgrounds
 
@@ -37,7 +37,10 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 		{
 			ServiceProvider = new BasicServiceProvider(this);
 			MemoryCallbacks = new MemoryCallbackSystem();
-			Tracer = new TraceBuffer();
+			Tracer = new TraceBuffer
+			{
+				Header = "65816: PC, mnemonic, operands, registers (A, X, Y, S, D, DB, flags (NVMXDIZC), V, H)"
+			};
 			(ServiceProvider as BasicServiceProvider).Register<ITraceable>(Tracer);
 
 			(ServiceProvider as BasicServiceProvider).Register<IDisassemblable>(new BizHawk.Emulation.Cores.Components.W65816.W65816_DisassemblerService());
@@ -394,17 +397,13 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 		void snes_trace(string msg)
 		{
 			// TODO: get them out of the core split up and remove this hackery
-			string splitStr = "[";
-			if (!msg.Contains('['))
-			{
-				splitStr = "A:";
-			}
-
-			var split = msg.Split(new[] { splitStr }, StringSplitOptions.None);
+			string splitStr = "A:";
+			
+			var split = msg.Split(new[] {splitStr }, 2, StringSplitOptions.None);
 
 			Tracer.Put(new TraceInfo
 			{
-				Disassembly = split[0],
+				Disassembly = split[0].PadRight(34),
 				RegisterInfo = splitStr + split[1]
 			});
 		}
@@ -481,9 +480,14 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 
 		bool LoadCurrent()
 		{
+			bool result = false;
 			if (CurrLoadParams.type == LoadParamType.Normal)
-				return api.CMD_load_cartridge_normal(CurrLoadParams.xml_data, CurrLoadParams.rom_data);
-			else return api.CMD_load_cartridge_super_game_boy(CurrLoadParams.rom_xml, CurrLoadParams.rom_data, CurrLoadParams.rom_size, CurrLoadParams.dmg_xml, CurrLoadParams.dmg_data, CurrLoadParams.dmg_size);
+				result = api.CMD_load_cartridge_normal(CurrLoadParams.xml_data, CurrLoadParams.rom_data);
+			else result = api.CMD_load_cartridge_super_game_boy(CurrLoadParams.rom_xml, CurrLoadParams.rom_data, CurrLoadParams.rom_size, CurrLoadParams.dmg_xml, CurrLoadParams.dmg_data, CurrLoadParams.dmg_size);
+
+			mapper = api.QUERY_get_mapper();
+
+			return result;
 		}
 
 		/// <summary>
@@ -634,6 +638,11 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 
 			IsLagFrame = true;
 
+			if (!nocallbacks && Tracer.Enabled)
+				api.QUERY_set_trace_callback(tracecb);
+			else
+				api.QUERY_set_trace_callback(null);
+
 			// for deterministic emulation, save the state we're going to use before frame advance
 			// don't do this during nocallbacks though, since it's already been done
 			if (!nocallbacks && DeterministicEmulation)
@@ -648,11 +657,6 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 				bw.Close();
 				savestatebuff = ms.ToArray();
 			}
-
-			if (!nocallbacks && Tracer.Enabled)
-				api.QUERY_set_trace_callback(tracecb);
-			else
-				api.QUERY_set_trace_callback(null);
 
 			// speedup when sound rendering is not needed
 			if (!rendersound)
@@ -1055,6 +1059,88 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 			return null;
 		}
 
+		private LibsnesApi.SNES_MAPPER? mapper = null;
+
+		// works for ROM, garbage for anything else
+		byte FakeBusRead(int addr)
+		{
+			addr &= 0xffffff;
+			int bank = addr >> 16;
+			int low = addr & 0xffff;
+
+			if (!mapper.HasValue)
+			{
+				return 0;
+			}
+
+			switch (mapper)
+			{
+				case LibsnesApi.SNES_MAPPER.LOROM:
+					if (low >= 0x8000)
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.EXLOROM:
+					if ((bank >= 0x40 && bank <= 0x7f) || low >= 0x8000)
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.HIROM:
+				case LibsnesApi.SNES_MAPPER.EXHIROM:
+					if ((bank >= 0x40 && bank <= 0x7f) || bank >= 0xc0 || low >= 0x8000)
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.SUPERFXROM:
+					if ((bank >= 0x40 && bank <= 0x5f) || (bank >= 0xc0 && bank <= 0xdf) ||
+						(low >= 0x8000 && ((bank >= 0x00 && bank <= 0x3f) || (bank >= 0x80 && bank <= 0xbf))))
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.SA1ROM:
+					if (bank >= 0xc0 || (low >= 0x8000 && ((bank >= 0x00 && bank <= 0x3f) || (bank >= 0x80 && bank <= 0xbf))))
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.BSCLOROM:
+					if (low >= 0x8000 && ((bank >= 0x00 && bank <= 0x3f) || (bank >= 0x80 && bank <= 0xbf)))
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.BSCHIROM:
+					if ((bank >= 0x40 && bank <= 0x5f) || (bank >= 0xc0 && bank <= 0xdf) ||
+						(low >= 0x8000 && ((bank >= 0x00 && bank <= 0x1f) || (bank >= 0x80 && bank <= 0x9f))))
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.BSXROM:
+					if ((bank >= 0x40 && bank <= 0x7f) || bank >= 0xc0 ||
+						(low >= 0x8000 && ((bank >= 0x00 && bank <= 0x3f) || (bank >= 0x80 && bank <= 0xbf))) ||
+						(low >= 0x6000 && low <= 0x7fff && (bank >= 0x20 && bank <= 0x3f)))
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				case LibsnesApi.SNES_MAPPER.STROM:
+					if (low >= 0x8000 && ((bank >= 0x00 && bank <= 0x5f) || (bank >= 0x80 && bank <= 0xdf)))
+					{
+						return api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr);
+					}
+					break;
+				default:
+					throw new InvalidOperationException(string.Format("Unknown mapper: {0}", mapper));
+			}
+
+			return 0;
+		}
+
 		unsafe void MakeFakeBus()
 		{
 			int size = (int)api.QUERY_get_memory_size(LibsnesApi.SNES_MEMORY.WRAM);
@@ -1063,21 +1149,21 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 
 			byte* blockptr = api.QUERY_get_memory_data(LibsnesApi.SNES_MEMORY.WRAM);
 
-			var md = new MemoryDomain("System Bus", 0x1000000, MemoryDomain.Endian.Little,
+			var md = new MemoryDomainDelegate("System Bus", 0x1000000, MemoryDomain.Endian.Little,
 				(addr) =>
 				{
 					var a = FakeBusMap((int)addr);
 					if (a.HasValue)
 						return blockptr[a.Value];
 					else
-						return 0;
+						return FakeBusRead((int)addr);
 				},
 				(addr, val) =>
 				{
 					var a = FakeBusMap((int)addr);
 					if (a.HasValue)
 						blockptr[a.Value] = val;
-				}, byteSize: 2);
+				}, wordSize: 2);
 			_memoryDomains.Add(md);
 		}
 
@@ -1103,17 +1189,17 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 				//maybe a better way to visualize it is with an empty bus and adjacent banks
 				//so, we just throw away everything above its size of 544 bytes
 				if (size != 544) throw new InvalidOperationException("oam size isnt 544 bytes.. wtf?");
-				md = new MemoryDomain(name, size, endian,
-					(addr) => (addr < 544) ? blockptr[addr] : (byte)0x00,
-						(addr, value) => { if (addr < 544) blockptr[addr] = value; },
-						byteSize);
+				md = new MemoryDomainDelegate(name, size, endian,
+				   (addr) => (addr < 544) ? blockptr[addr] : (byte)0x00,
+					 (addr, value) => { if (addr < 544) blockptr[addr] = value; },
+					 byteSize);
 			}
-			else if (pow2)
-				md = new MemoryDomain(name, size, endian,
+			else if(pow2)
+				md = new MemoryDomainDelegate(name, size, endian,
 						(addr) => blockptr[addr & mask],
 						(addr, value) => blockptr[addr & mask] = value, byteSize);
 			else
-				md = new MemoryDomain(name, size, endian,
+				md = new MemoryDomainDelegate(name, size, endian,
 						(addr) => blockptr[addr % size],
 						(addr, value) => blockptr[addr % size] = value, byteSize);
 
@@ -1124,9 +1210,6 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 
 		void SetupMemoryDomains(byte[] romData, byte[] sgbRomData)
 		{
-			// remember, MainMemory must always be the same as MemoryDomains[0], else GIANT DRAGONS
-			//<zeromus> - this is stupid.
-
 			//lets just do this entirely differently for SGB
 			if (IsSGB)
 			{
@@ -1134,13 +1217,8 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 				//You wouldnt expect a DMG game to access excess wram, but what if it tried to? maybe an oversight in bsnes?
 				MakeMemoryDomain("SGB WRAM", LibsnesApi.SNES_MEMORY.SGB_WRAM, MemoryDomain.Endian.Little);
 
-
-				var romDomain = new MemoryDomain("SGB CARTROM", romData.Length, MemoryDomain.Endian.Little,
-					(addr) => romData[addr],
-					(addr, value) => romData[addr] = value);
+				var romDomain = new MemoryDomainByteArray("SGB CARTROM", MemoryDomain.Endian.Little, romData, true, 1);
 				_memoryDomains.Add(romDomain);
-
-
 				//the last 1 byte of this is special.. its an interrupt enable register, instead of ram. weird. maybe its actually ram and just getting specially used?
 				MakeMemoryDomain("SGB HRAM", LibsnesApi.SNES_MEMORY.SGB_HRAM, MemoryDomain.Endian.Little);
 
@@ -1148,9 +1226,7 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 
 				MainMemory = MakeMemoryDomain("WRAM", LibsnesApi.SNES_MEMORY.WRAM, MemoryDomain.Endian.Little);
 
-				var sgbromDomain = new MemoryDomain("SGB.SFC ROM", sgbRomData.Length, MemoryDomain.Endian.Little,
-					(addr) => sgbRomData[addr],
-					(addr, value) => sgbRomData[addr] = value);
+				var sgbromDomain = new MemoryDomainByteArray("SGB.SFC ROM", MemoryDomain.Endian.Little, sgbRomData, true, 1);
 				_memoryDomains.Add(sgbromDomain);
 			}
 			else
@@ -1167,9 +1243,9 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 
 				if (!DeterministicEmulation)
 				{
-					_memoryDomains.Add(new MemoryDomain("System Bus", 0x1000000, MemoryDomain.Endian.Little,
+					_memoryDomains.Add(new MemoryDomainDelegate("System Bus", 0x1000000, MemoryDomain.Endian.Little,
 						(addr) => api.QUERY_peek(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr),
-						(addr, val) => api.QUERY_poke(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr, val), byteSize: 2));
+						(addr, val) => api.QUERY_poke(LibsnesApi.SNES_MEMORY.SYSBUS, (uint)addr, val), wordSize: 2));
 				}
 				else
 				{

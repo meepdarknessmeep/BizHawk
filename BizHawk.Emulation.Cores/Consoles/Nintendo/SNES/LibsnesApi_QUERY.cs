@@ -91,6 +91,10 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 		public delegate void QUERY_set_cdl_t(int i, IntPtr block, int size);
 		public QUERY_set_cdl_t managed_QUERY_set_cdl;
 
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+		public delegate byte QUERY_get_mapper_t();
+		public QUERY_get_mapper_t managed_QUERY_get_mapper;
+
 		void InitQueryFunctions()
 		{
 			instanceDll.Retrieve(out QUERY_library_id, "QUERY_library_id");
@@ -114,11 +118,17 @@ namespace BizHawk.Emulation.Cores.Nintendo.SNES
 			instanceDll.Retrieve(out QUERY_set_color_lut, "QUERY_set_color_lut");
 			instanceDll.Retrieve(out QUERY_peek_cpu_regs, "QUERY_peek_cpu_regs");
 			instanceDll.Retrieve(out managed_QUERY_set_cdl, "QUERY_set_cdl");
+			instanceDll.Retrieve(out managed_QUERY_get_mapper, "QUERY_get_mapper");
 		}
         
 		public SNES_REGION QUERY_get_region()
 		{
 			return (SNES_REGION)QUERY_snes_get_region();
+		}
+
+		public SNES_MAPPER QUERY_get_mapper()
+		{
+			return (SNES_MAPPER)managed_QUERY_get_mapper();
 		}
 
 		public int QUERY_get_memory_size(SNES_MEMORY id)

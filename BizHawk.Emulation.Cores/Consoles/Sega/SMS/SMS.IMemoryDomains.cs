@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using BizHawk.Emulation.Common;
 
@@ -8,22 +9,14 @@ namespace BizHawk.Emulation.Cores.Sega.MasterSystem
 	public sealed partial class SMS
 	{
 		private MemoryDomainList MemoryDomains;
+		private readonly Dictionary<string, MemoryDomainByteArray> _byteArrayDomains = new Dictionary<string, MemoryDomainByteArray>();
+		private bool _memoryDomainsInit = false;
 
 		void SetupMemoryDomains()
 		{
-			var domains = new List<MemoryDomain>(3);
-			var MainMemoryDomain = new MemoryDomain("Main RAM", SystemRam.Length, MemoryDomain.Endian.Little,
-				addr => SystemRam[addr],
-				(addr, value) => SystemRam[addr] = value);
-			var VRamDomain = new MemoryDomain("Video RAM", Vdp.VRAM.Length, MemoryDomain.Endian.Little,
-				addr => Vdp.VRAM[addr],
-				(addr, value) => Vdp.VRAM[addr] = value);
-
-			var ROMDomain = new MemoryDomain("ROM", RomData.Length, MemoryDomain.Endian.Little,
-				addr => RomData[addr],
-				(addr, value) => RomData[addr] = value);
-
-			var SystemBusDomain = new MemoryDomain("System Bus", 0x10000, MemoryDomain.Endian.Little,
+			var domains = new List<MemoryDomain>
+			{
+				new MemoryDomainDelegate("System Bus", 0x10000, MemoryDomain.Endian.Little,
 				(addr) =>
 				{
 					if (addr < 0 || addr >= 65536)
@@ -41,31 +34,49 @@ namespace BizHawk.Emulation.Cores.Sega.MasterSystem
 					}
 
 					Cpu.WriteMemory((ushort)addr, value);
-				});
-
-			domains.Add(MainMemoryDomain);
-			domains.Add(VRamDomain);
-			domains.Add(ROMDomain);
-			domains.Add(SystemBusDomain);
+				}, 1)
+			};
 
 			if (SaveRAM != null)
 			{
-				var SaveRamDomain = new MemoryDomain("Save RAM", SaveRAM.Length, MemoryDomain.Endian.Little,
+				var saveRamDomain = new MemoryDomainDelegate("Save RAM", SaveRAM.Length, MemoryDomain.Endian.Little,
 					addr => SaveRAM[addr],
-					(addr, value) => { SaveRAM[addr] = value; SaveRamModified = true; });
-				domains.Add(SaveRamDomain);
+					(addr, value) => { SaveRAM[addr] = value; SaveRamModified = true; }, 1);
+				domains.Add(saveRamDomain);
 			}
+
+			SyncAllByteArrayDomains();
+
+			MemoryDomains = new MemoryDomainList(_byteArrayDomains.Values.Concat(domains).ToList());
+			(ServiceProvider as BasicServiceProvider).Register<IMemoryDomains>(MemoryDomains);
+
+			_memoryDomainsInit = true;
+		}
+
+		private void SyncAllByteArrayDomains()
+		{
+			SyncByteArrayDomain("Main RAM", SystemRam);
+			SyncByteArrayDomain("Video RAM", Vdp.VRAM);
+			SyncByteArrayDomain("ROM", RomData);
 
 			if (ExtRam != null)
 			{
-				var ExtRamDomain = new MemoryDomain("Cart (Volatile) RAM", ExtRam.Length, MemoryDomain.Endian.Little,
-					addr => ExtRam[addr],
-					(addr, value) => { ExtRam[addr] = value; });
-				domains.Add(ExtRamDomain);
+				SyncByteArrayDomain("Cart (Volatile) RAM", Vdp.VRAM);
 			}
+		}
 
-			MemoryDomains = new MemoryDomainList(domains);
-			(ServiceProvider as BasicServiceProvider).Register<IMemoryDomains>(MemoryDomains);
+		private void SyncByteArrayDomain(string name, byte[] data)
+		{
+			if (_memoryDomainsInit)
+			{
+				var m = _byteArrayDomains[name];
+				m.Data = data;
+			}
+			else
+			{
+				var m = new MemoryDomainByteArray(name, MemoryDomain.Endian.Little, data, true, 1);
+				_byteArrayDomains.Add(name, m);
+			}
 		}
 	}
 }

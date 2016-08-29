@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Text;
 using Newtonsoft.Json;
 
-
 namespace BizHawk.Client.Common
 {
 	public class TasStateManagerSettings
@@ -13,6 +12,7 @@ namespace BizHawk.Client.Common
 			DiskSaveCapacitymb = 512;
 			Capacitymb = 512;
 			DiskCapacitymb = 512;
+			StateGap = 4;
 			BranchStatesInTasproj = false;
 			EraseBranchStatesFirst = true;
 		}
@@ -22,6 +22,7 @@ namespace BizHawk.Client.Common
 			DiskSaveCapacitymb = settings.DiskSaveCapacitymb;
 			Capacitymb = settings.Capacitymb;
 			DiskCapacitymb = settings.DiskCapacitymb;
+			StateGap = settings.StateGap;
 			BranchStatesInTasproj = settings.BranchStatesInTasproj;
 			EraseBranchStatesFirst = settings.EraseBranchStatesFirst;
 		}
@@ -53,6 +54,13 @@ namespace BizHawk.Client.Common
 		[DisplayName("Disk Capacity (in megabytes)")]
 		[Description("The size limit of the state history buffer on the disk.  When this limit is reached it will start removing previous savestates")]
 		public int DiskCapacitymb { get; set; }
+
+		/// <summary>
+		/// The amount of states to skip during project saving
+		/// </summary>
+		[DisplayName("State interval for .tasproj")]
+		[Description("The actual state gap in frames is calculated as Nth power on 2")]
+		public int StateGap { get; set; }
 
 		/// <summary>
 		/// Put branch states to .tasproj
@@ -97,6 +105,7 @@ namespace BizHawk.Client.Common
 			sb.AppendLine(DiskCapacitymb.ToString());
 			sb.AppendLine(BranchStatesInTasproj.ToString());
 			sb.AppendLine(EraseBranchStatesFirst.ToString());
+			sb.AppendLine(StateGap.ToString());
 
 			return sb.ToString();
 		}
@@ -105,34 +114,48 @@ namespace BizHawk.Client.Common
 		{
 			if (!string.IsNullOrWhiteSpace(settings))
 			{
-				string[] lines = settings.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
-				Capacitymb = int.Parse(lines[1]);
-				int refCapacity;
-
-				if (!int.TryParse(lines[0], out refCapacity))
+				try
 				{
-					if (bool.Parse(lines[0]))
-						DiskSaveCapacitymb = Capacitymb;
+					string[] lines = settings.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+					Capacitymb = int.Parse(lines[1]);
+					int refCapacity;
+
+					if (!int.TryParse(lines[0], out refCapacity))
+					{
+						if (bool.Parse(lines[0]))
+							DiskSaveCapacitymb = Capacitymb;
+						else
+							DiskSaveCapacitymb = 0;
+					}
 					else
-						DiskSaveCapacitymb = 0;
+						DiskSaveCapacitymb = refCapacity;
+
+					if (lines.Length > 2)
+						DiskCapacitymb = int.Parse(lines[2]);
+					else
+						DiskCapacitymb = 512;
+
+					if (lines.Length > 3)
+						BranchStatesInTasproj = bool.Parse(lines[3]);
+					else
+						BranchStatesInTasproj = false;
+
+					if (lines.Length > 4)
+						EraseBranchStatesFirst = bool.Parse(lines[4]);
+					else
+						EraseBranchStatesFirst = true;
+
+					if (lines.Length > 5)
+						StateGap = int.Parse(lines[5]);
+					else
+						StateGap = 4;
 				}
-				else
-					DiskSaveCapacitymb = refCapacity;
-
-				if (lines.Length > 2)
-					DiskCapacitymb = int.Parse(lines[2]);
-				else
-					DiskCapacitymb = 512;
-
-				if (lines.Length > 3)
-					BranchStatesInTasproj = bool.Parse(lines[3]);
-				else
-					BranchStatesInTasproj = false;
-
-				if (lines.Length > 4)
-					EraseBranchStatesFirst = bool.Parse(lines[4]);
-				else
-					EraseBranchStatesFirst = true;
+				catch (Exception)
+				{
+					// "GreenZoneSettings inconsistent, ignoring"
+					// if we don't catch it, the project won't load
+					// but dialog boxes aren't supposed to exist here?
+				}
 			}
 		}
 	}

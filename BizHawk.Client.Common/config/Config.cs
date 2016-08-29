@@ -127,6 +127,7 @@ namespace BizHawk.Client.Common
 		public DateTime? Update_LastCheckTimeUTC = null;
 		public string Update_LatestVersion = "";
 		public string Update_IgnoreVersion = "";
+		public bool CDLAutoSave = true, CDLAutoStart = true;
 
 		//public bool TurboSeek = true; // When PauseOnFrame is set, this will decide whether the client goes into turbo mode or not
 
@@ -329,8 +330,11 @@ namespace BizHawk.Client.Common
 		public ESoundOutputMethod SoundOutputMethod = ESoundOutputMethod.OpenAL;
 #endif
 		public bool SoundEnabled = true;
+		public bool SoundEnabledNormal = true;
+		public bool SoundEnabledRWFF = true;
 		public bool MuteFrameAdvance = true;
 		public int SoundVolume = 100; // Range 0-100
+		public int SoundVolumeRWFF = 50; // Range 0-100
 		public bool SoundThrottle = false;
 		public string SoundDevice = "";
 		public int SoundBufferSizeMs = 100;

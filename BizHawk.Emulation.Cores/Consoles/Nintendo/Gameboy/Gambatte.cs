@@ -104,7 +104,7 @@ namespace BizHawk.Emulation.Cores.Nintendo.Gameboy
 			ServiceProvider = ser;
 			Tracer = new TraceBuffer
 			{
-				Header = "Z80: PC, opcode, registers(SP, A, B, C, D, E, F, H, L, LY, CY)"
+				Header = "Z80: PC, opcode, registers (A, B, C, D, E, F, H, L, LY, SP, CY)"
 			};
 			ser.Register<ITraceable>(Tracer);
 			InitMemoryCallbacks();
@@ -302,7 +302,7 @@ namespace BizHawk.Emulation.Cores.Nintendo.Gameboy
 				tracecb = null;
 			LibGambatte.gambatte_settracecallback(GambatteState, tracecb);
 
-			LibGambatte.gambatte_setlayers(GambatteState, (_settings.DisplayBG ? 1 : 0) | (_settings.DisplayOBJ ? 2 : 0));
+			LibGambatte.gambatte_setlayers(GambatteState, (_settings.DisplayBG ? 1 : 0) | (_settings.DisplayOBJ ? 2 : 0) | (_settings.DisplayWindow ? 4 : 0 ) );
 		}
 
 		internal void FrameAdvancePost()

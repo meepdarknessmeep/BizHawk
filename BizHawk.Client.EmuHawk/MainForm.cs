@@ -34,6 +34,7 @@ using BizHawk.Emulation.Cores.Nintendo.N64;
 using BizHawk.Client.EmuHawk.WinFormExtensions;
 using BizHawk.Client.EmuHawk.ToolExtensions;
 using BizHawk.Client.EmuHawk.CoreExtensions;
+using BizHawk.Client.ApiHawk;
 
 namespace BizHawk.Client.EmuHawk
 {
@@ -455,10 +456,9 @@ namespace BizHawk.Client.EmuHawk
 
 			SynchChrome();
 
-			//TODO POOP
 			PresentationPanel.Control.Paint += (o, e) =>
 			{
-				GlobalWin.DisplayManager.NeedsToPaint = true;
+				//I would like to trigger a repaint here, but this isnt done yet
 			};
 		}
 
@@ -517,18 +517,10 @@ namespace BizHawk.Client.EmuHawk
 					GlobalWin.Tools.LuaConsole.ResumeScripts(false);
 				}
 
-				if (Global.Config.DisplayInput) // Input display wants to update even while paused
-				{
-					GlobalWin.DisplayManager.NeedsToPaint = true;
-				}
-
 				StepRunLoop_Core();
 				StepRunLoop_Throttle();
 
-				if (GlobalWin.DisplayManager.NeedsToPaint)
-				{
-					Render();
-				}
+				Render();
 
 				CheckMessages();
 
@@ -572,7 +564,7 @@ namespace BizHawk.Client.EmuHawk
 			base.Dispose(disposing);
 		}
 
-		#endregion`
+		#endregion
 
 		#region Pause
 
@@ -1778,11 +1770,11 @@ namespace BizHawk.Client.EmuHawk
 			};
 
 			//if(ioa is this or that) - for more complex behaviour
-			rom = ioa.SimplePath;
+			string romPath = ioa.SimplePath;
 
-			if (!LoadRom(rom, args))
+			if (!LoadRom(romPath, args))
 			{
-				Global.Config.RecentRoms.HandleLoadError(rom);
+				Global.Config.RecentRoms.HandleLoadError(romPath, rom);
 			}
 		}
 
@@ -2181,7 +2173,7 @@ namespace BizHawk.Client.EmuHawk
 				Global.Config.SoundVolume = 100;
 			}
 
-			GlobalWin.Sound.ApplyVolumeSettings();
+			//GlobalWin.Sound.ApplyVolumeSettings();
 			GlobalWin.OSD.AddMessage("Volume " + Global.Config.SoundVolume);
 		}
 
@@ -2193,7 +2185,7 @@ namespace BizHawk.Client.EmuHawk
 				Global.Config.SoundVolume = 0;
 			}
 
-			GlobalWin.Sound.ApplyVolumeSettings();
+			//GlobalWin.Sound.ApplyVolumeSettings();
 			GlobalWin.OSD.AddMessage("Volume " + Global.Config.SoundVolume);
 		}
 
@@ -2695,6 +2687,8 @@ namespace BizHawk.Client.EmuHawk
 					runFrame = true;
 					_runloopFrameadvance = true;
 					_frameAdvanceTimestamp = currentTimestamp;
+					if (GlobalWin.Tools.IsLoaded<TAStudio>())
+						GlobalWin.Tools.TAStudio.IgnoreSeekFrame = false;
 				}
 				else
 				{
@@ -2731,7 +2725,10 @@ namespace BizHawk.Client.EmuHawk
 				runFrame = true;
 			}
 
-			var genSound = false;
+			float atten = Global.Config.SoundVolume / 100.0f;
+			if (!Global.Config.SoundEnabledNormal)
+				atten = 0;
+
 			var coreskipaudio = false;
 			if (runFrame || force)
 			{
@@ -2806,11 +2803,18 @@ namespace BizHawk.Client.EmuHawk
 
 				if (!_runloopFrameadvance)
 				{
-					genSound = true;
+					
 				}
 				else if (!Global.Config.MuteFrameAdvance)
 				{
-					genSound = true;
+					atten = 0;
+				}
+
+				if (isFastForwarding || IsTurboing || isRewinding)
+				{
+					atten *= Global.Config.SoundVolumeRWFF / 100.0f;
+					if (!Global.Config.SoundEnabledRWFF)
+						atten = 0;
 				}
 
 				Global.MovieSession.HandleMovieOnFrameLoop();
@@ -2831,7 +2835,6 @@ namespace BizHawk.Client.EmuHawk
 
 				Global.MovieSession.HandleMovieAfterFrameLoop();
 
-				GlobalWin.DisplayManager.NeedsToPaint = true;
 				Global.CheatList.Pulse();
 
 				if (!PauseAVI)
@@ -2871,6 +2874,10 @@ namespace BizHawk.Client.EmuHawk
 					}
 				}
 			}
+			else
+			{
+				atten = 0;
+			}
 
 			if (Global.ClientControls["Rewind"] || PressRewind)
 			{
@@ -2883,8 +2890,7 @@ namespace BizHawk.Client.EmuHawk
 				UpdateFrame = false;
 			}
 
-			bool outputSilence = !genSound || coreskipaudio;
-			GlobalWin.Sound.UpdateSound(outputSilence);
+			GlobalWin.Sound.UpdateSound(atten);
 		}
 
 		#endregion
@@ -3113,7 +3119,6 @@ namespace BizHawk.Client.EmuHawk
 
 		private void AvFrameAdvance()
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			if (_currAviWriter != null)
 			{
 				//TODO ZERO - this code is pretty jacked. we'll want to frugalize buffers better for speedier dumping, and we might want to rely on the GL layer for padding
@@ -3222,8 +3227,6 @@ namespace BizHawk.Client.EmuHawk
 						}
 					}
 				}
-
-				GlobalWin.DisplayManager.NeedsToPaint = true;
 			}
 		}
 
@@ -3580,6 +3583,9 @@ namespace BizHawk.Client.EmuHawk
 				StopMovie(true);
 			}
 
+			if (GlobalWin.Tools.IsLoaded<TraceLogger>())
+				GlobalWin.Tools.Get<TraceLogger>().Restart();
+
 			Global.CheatList.SaveOnClose();
 			Global.Emulator.Dispose();
 			var coreComm = CreateCoreComm();
@@ -3698,10 +3704,10 @@ namespace BizHawk.Client.EmuHawk
 			if (fromLua)
 				Global.MovieSession.Movie.IsCountingRerecords = false;
 
-			GlobalWin.DisplayManager.NeedsToPaint = true;
-
 			if (SavestateManager.LoadStateFile(path, userFriendlyStateName))
 			{
+				ClientApi.OnStateLoaded(this, userFriendlyStateName);
+
 				if (GlobalWin.Tools.Has<LuaConsole>())
 				{
 					GlobalWin.Tools.LuaConsole.LuaImp.CallLoadStateEvent(userFriendlyStateName);
@@ -3730,6 +3736,13 @@ namespace BizHawk.Client.EmuHawk
 		public void LoadQuickSave(string quickSlotName, bool fromLua = false, bool supressOSD = false)
 		{
 			if (!Global.Emulator.HasSavestates())
+			{
+				return;
+			}
+
+			bool handled;
+			ClientApi.OnBeforeQuickLoad(this, quickSlotName, out handled);
+			if (handled)
 			{
 				return;
 			}
@@ -3768,6 +3781,8 @@ namespace BizHawk.Client.EmuHawk
 			{
 				SavestateManager.SaveStateFile(path, userFriendlyStateName);
 
+				ClientApi.OnStateSaved(this, userFriendlyStateName);
+
 				GlobalWin.OSD.AddMessage("Saved state: " + userFriendlyStateName);
 			}
 			catch (IOException)
@@ -3784,6 +3799,13 @@ namespace BizHawk.Client.EmuHawk
 		public void SaveQuickSave(string quickSlotName)
 		{
 			if (!Global.Emulator.HasSavestates())
+			{
+				return;
+			}
+
+			bool handled;
+			ClientApi.OnBeforeQuickSave(this, quickSlotName, out handled);
+			if(handled)
 			{
 				return;
 			}
@@ -4011,16 +4033,37 @@ namespace BizHawk.Client.EmuHawk
 
 		private bool Rewind(ref bool runFrame, long currentTimestamp)
 		{
+			var isRewinding = false;
+
 			if (IsSlave && master.WantsToControlRewind)
 			{
 				if (Global.ClientControls["Rewind"] || PressRewind)
 				{
-					runFrame = true; // TODO: the master should be deciding this!
-					return master.Rewind();
+					if (_frameRewindTimestamp == 0)
+					{
+						isRewinding = true;
+						_frameRewindTimestamp = currentTimestamp;
+					}
+					else
+					{
+						double timestampDeltaMs = (double)(currentTimestamp - _frameRewindTimestamp) / Stopwatch.Frequency * 1000.0;
+						isRewinding = timestampDeltaMs >= Global.Config.FrameProgressDelayMs;
+					}
+
+					if (isRewinding)
+					{
+						runFrame = true; // TODO: the master should be deciding this!
+						master.Rewind();
+					}
 				}
+				else
+				{
+					_frameRewindTimestamp = 0;
+				}
+
+				return isRewinding;
 			}
 
-			var isRewinding = false;
 			if (Global.Rewinder.RewindActive && (Global.ClientControls["Rewind"] || PressRewind)
 				&& !Global.MovieSession.Movie.IsRecording) // Rewind isn't "bulletproof" and can desync a recording movie!
 			{

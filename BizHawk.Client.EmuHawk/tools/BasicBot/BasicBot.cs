@@ -371,6 +371,8 @@ namespace BizHawk.Client.EmuHawk
 
 		public bool UpdateBefore { get { return true; } }
 
+		public void NewUpdate(ToolFormUpdateType type) { }
+
 		public void UpdateValues()
 		{
 			Update(fast: false);
@@ -873,10 +875,10 @@ namespace BizHawk.Client.EmuHawk
 					val = _currentDomain.PeekByte(addr);
 					break;
 				case 2:
-					val = _currentDomain.PeekWord(addr, _bigEndian);
+					val = _currentDomain.PeekUshort(addr, _bigEndian);
 					break;
 				case 4:
-					val = (int)_currentDomain.PeekDWord(addr, _bigEndian);
+					val = (int)_currentDomain.PeekUint(addr, _bigEndian);
 					break;
 			}
 

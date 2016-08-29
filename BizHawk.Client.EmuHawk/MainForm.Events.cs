@@ -52,7 +52,6 @@ namespace BizHawk.Client.EmuHawk
 			if (SaveRAMSubMenu.Font.Bold != needBold)
 			{
 				var font = new System.Drawing.Font(SaveRAMSubMenu.Font, needBold ? FontStyle.Bold : FontStyle.Regular);
-				SaveRAMSubMenu.Font.Dispose();
 				SaveRAMSubMenu.Font = font;
 			}
 		}
@@ -811,37 +810,31 @@ namespace BizHawk.Client.EmuHawk
 
 		private void DisplayFPSMenuItem_Click(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			ToggleFPS();
 		}
 
 		private void DisplayFrameCounterMenuItem_Click(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			ToggleFrameCounter();
 		}
 
 		private void DisplayLagCounterMenuItem_Click(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			ToggleLagCounter();
 		}
 
 		private void DisplayInputMenuItem_Click(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			ToggleInputDisplay();
 		}
 
 		private void DisplayRerecordsMenuItem_Click(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			Global.Config.DisplayRerecordCount ^= true;
 		}
 
 		private void DisplaySubtitlesMenuItem_Click(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			Global.Config.DisplaySubtitles ^= true;
 		}
 
@@ -1295,8 +1288,8 @@ namespace BizHawk.Client.EmuHawk
 		private void ToolsSubMenu_DropDownOpened(object sender, EventArgs e)
 		{
 			ToolBoxMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["ToolBox"].Bindings;
-			RamWatchMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["Ram Watch"].Bindings;
-			RamSearchMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["Ram Search"].Bindings;
+			RamWatchMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["RAM Watch"].Bindings;
+			RamSearchMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["RAM Search"].Bindings;
 			HexEditorMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["Hex Editor"].Bindings;
 			LuaConsoleMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["Lua Console"].Bindings;
 			CheatsMenuItem.ShortcutKeyDisplayString = Global.Config.HotkeyBindings["Cheats"].Bindings;
@@ -1632,6 +1625,7 @@ namespace BizHawk.Client.EmuHawk
 			SMSOverclockMenuItem.Checked = ss.AllowOverlock;
 			SMSForceStereoMenuItem.Checked = s.ForceStereoSeparation;
 			SMSSpriteLimitMenuItem.Checked = s.SpriteLimit;
+			SMSDisplayOverscanMenuItem.Checked = s.DisplayOverscan;
 			SMSFix3DGameDisplayToolStripMenuItem.Checked = s.Fix3D;
 			ShowClippedRegionsMenuItem.Checked = s.ShowClippedRegions;
 			HighlightActiveDisplayRegionMenuItem.Checked = s.HighlightActiveDisplayRegion;
@@ -1639,6 +1633,7 @@ namespace BizHawk.Client.EmuHawk
 			SMSEnableFMChipMenuItem.Visible =
 				SMSFix3DGameDisplayToolStripMenuItem.Visible =
 				SMSenableBIOSToolStripMenuItem.Visible =
+				SMSDisplayOverscanMenuItem.Visible =
 				Global.Game.System == "SMS";
 
 			SMSOverclockMenuItem.Visible =
@@ -1731,6 +1726,13 @@ namespace BizHawk.Client.EmuHawk
 		{
 			var s = ((SMS)Global.Emulator).GetSettings();
 			s.SpriteLimit ^= true;
+			PutCoreSettings(s);
+		}
+
+		private void SMSDisplayOverscanMenuItem_Click(object sender, EventArgs e)
+		{
+			var s = ((SMS)Global.Emulator).GetSettings();
+			s.DisplayOverscan ^= true;
 			PutCoreSettings(s);
 		}
 
@@ -2673,7 +2675,6 @@ namespace BizHawk.Client.EmuHawk
 
 		private void MainForm_Enter(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			AutohideCursor(false);
 		}
 
@@ -2711,7 +2712,6 @@ namespace BizHawk.Client.EmuHawk
 
 		private void MainformMenu_Leave(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 		}
 
 		private void MainformMenu_MenuActivate(object sender, EventArgs e)
@@ -2727,7 +2727,6 @@ namespace BizHawk.Client.EmuHawk
 
 		private void MainformMenu_MenuDeactivate(object sender, EventArgs e)
 		{
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			if (!_wasPaused)
 			{
 				UnpauseEmulator();
@@ -2753,7 +2752,7 @@ namespace BizHawk.Client.EmuHawk
 
 		private void FormDragDrop_internal(object sender, DragEventArgs e)
 		{
-            _FormDragDrop_internal(sender, e);
+			_FormDragDrop_internal(sender, e);
 /*
 			var filePaths = (string[])e.Data.GetData(DataFormats.FileDrop);
 			var isLua = false;

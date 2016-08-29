@@ -18,7 +18,7 @@ namespace BizHawk.Client.EmuHawk
 	{
 		private const string BranchNumberColumnName = "BranchNumberColumn";
 		private const string FrameColumnName = "FrameColumn";
-		private const string TimeColumnName = "TimeColumn";
+		private const string UserTextColumnName = "TextColumn";
 
 		private readonly PlatformFrameRates FrameRates = new PlatformFrameRates();
 		private TasMovie Movie { get { return Tastudio.CurrentTasMovie; } }
@@ -54,8 +54,8 @@ namespace BizHawk.Client.EmuHawk
 				},
 				new InputRoll.RollColumn
 				{
-					Name = TimeColumnName,
-					Text = "TimeStamp",
+					Name = UserTextColumnName,
+					Text = "UserText",
 					Width = 90
 				},
 			});
@@ -81,8 +81,9 @@ namespace BizHawk.Client.EmuHawk
 				case FrameColumnName:
 					text = GetBranch(index).Frame.ToString();
 					break;
-				case TimeColumnName:
-					text = GetBranch(index).TimeStamp.ToString(@"hh\:mm\:ss\.ff");
+				case UserTextColumnName:
+					//text = GetBranch(index).TimeStamp.ToString(@"hh\:mm\:ss\.ff");
+					text = GetBranch(index).UserText;
 					break;
 			}
 		}
@@ -162,11 +163,10 @@ namespace BizHawk.Client.EmuHawk
 		private void LoadBranch(TasBranch branch)
 		{
 			Tastudio.CurrentTasMovie.LoadBranch(branch);
-			GlobalWin.DisplayManager.NeedsToPaint = true;
 			var stateInfo = new KeyValuePair<int, byte[]>(branch.Frame, branch.CoreData);
 			Tastudio.LoadState(stateInfo);
 			QuickBmpFile.Copy(new BitmapBufferVideoProvider(branch.OSDFrameBuffer), Global.Emulator.VideoProvider());
-			GlobalWin.MainForm.PauseEmulator();
+			//GlobalWin.MainForm.PauseEmulator();
 			GlobalWin.MainForm.PauseOnFrame = null;
 			Tastudio.RefreshDialog();
 		}
@@ -175,7 +175,6 @@ namespace BizHawk.Client.EmuHawk
 		{
 			Movie.UpdateBranch(branch, CreateBranch());
 			Tastudio.RefreshDialog();
-			//BranchView.Refresh();
 		}
 
 		private void LoadSelectedBranch()
@@ -277,6 +276,9 @@ namespace BizHawk.Client.EmuHawk
 
 		public void LoadBranchExternal(int slot = -1)
 		{
+			if (Tastudio.FloatEditingMode)
+				return;
+
 			if (slot != -1)
 			{
 				if (GetBranch(slot) != null)
@@ -294,6 +296,9 @@ namespace BizHawk.Client.EmuHawk
 
 		public void UpdateBranchExternal(int slot = -1)
 		{
+			if (Tastudio.FloatEditingMode)
+				return;
+
 			if (slot != -1)
 			{
 				if (GetBranch(slot) != null)
@@ -316,6 +321,9 @@ namespace BizHawk.Client.EmuHawk
 
 		public void SelectBranchExternal(int slot)
 		{
+			if (Tastudio.FloatEditingMode)
+				return;
+
 			if (GetBranch(slot) != null)
 			{
 				BranchView.SelectRow(slot, true);
